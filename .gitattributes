@@ -1,0 +1,8 @@
+# 二进制资源必须原样传输，禁止任何换行符转换
+*.wasm   binary
+*.onnx   binary
+*.jpg    binary
+*.jpeg   binary
+*.png    binary
+*.webp   binary
+*.ico    binary

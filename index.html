@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 抠图工坊 · 多模型本地抠图（图片不出浏览器）</title>
+<meta name="description" content="纯浏览器本地 AI 抠图：按主体类型自动选用擅长该领域的模型（真人像 / Q版3D手办 / 二次元动漫 / 商品静物 / 精细毛发），模型由浏览器端下载并缓存，支持手动上传模型，图片不上传服务器。" />
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b62f6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7.5l8-4 8 4-8 4-8-4z'/%3E%3Cpath d='M4 12l8 4 8-4'/%3E%3Cpath d='M4 16.5l8 4 8-4'/%3E%3C/svg%3E" />
+<meta property="og:title" content="AI 抠图工坊 · 多模型本地抠图" />
+<meta property="og:description" content="先选主体类型，自动调用最擅长该领域的 ONNX 抠图模型；推理全在浏览器本地，图片不上传。" />
+</head>
+<body>
+<div class="page">
+
+  <header class="head">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7.5l8-4 8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 16.5l8 4 8-4"/>
+        </svg>
+      </span>
+      <div>
+        <h1>AI 抠图工坊</h1>
+        <p class="sub">按主体选模型 · 全部在你的浏览器里跑 · 图片不上传服务器</p>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge">本地推理</span>
+      <span class="badge">多模型可选</span>
+      <span class="badge">模型可手动上传</span>
+    </div>
+  </header>
+
+  <p class="intro">
+    不同抠图模型擅长的领域差得很远：人像模型抠手办会整片丢，通用模型抠二次元线稿发丝会糊。
+    所以这里不让你猜参数——<b>先选「这张图拍的是什么」</b>，工具自动用对应的模型，也可以手动换别的模型对比。
+  </p>
+
+  <main class="work">
+
+    <!-- ============ 左侧：图片舞台 ============ -->
+    <section class="stage-col">
+      <div class="stage-card">
+        <div class="stage-bar">
+          <div class="tabs" id="tabs" hidden>
+            <button type="button" class="tab on" data-view="origin">原图</button>
+            <button type="button" class="tab" data-view="result">抠图结果</button>
+          </div>
+          <div class="stage-tools" id="stageTools" hidden>
+            <label class="chk"><input type="checkbox" id="chkChecker" checked><span>棋盘格</span></label>
+            <button type="button" class="mini ghost" id="btnReset">换一张</button>
+          </div>
+        </div>
+
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div class="dz-inner">
+            <div class="dz-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.6" cy="9.4" r="1.9"/><path d="M21 15.6l-4.4-4.4L6 21"/>
+              </svg>
+            </div>
+            <h2>把图片拖到这里</h2>
+            <p class="dz-actions">
+              <button class="linkbtn" type="button" id="btnPick">点击选择图片</button>
+              <span class="dotsep">·</span>
+              <button class="linkbtn" type="button" id="btnSample">用示例图试试</button>
+            </p>
+            <p class="dz-note">支持 JPG / PNG / WebP · Ctrl+V 直接粘贴截图 · 图片只在本地处理</p>
+          </div>
+        </div>
+
+        <div class="stage" id="stage" hidden>
+          <canvas id="view" width="16" height="9"></canvas>
+          <div class="stage-empty" id="stageHint">选好模型后点右侧「开始抠图」</div>
+        </div>
+
+        <div class="stage-foot" id="stageFoot" hidden>
+          <span class="meta" id="imgMeta">—</span>
+          <span class="meta" id="runMeta"></span>
+        </div>
+      </div>
+
+      <div class="export-row" id="exportRow" hidden>
+        <button class="btn primary" type="button" id="btnSavePng">下载透明 PNG</button>
+        <button class="btn" type="button" id="btnSaveJpg">下载白底 JPG</button>
+        <button class="btn ghost" type="button" id="btnSaveMask">下载蒙版</button>
+      </div>
+    </section>
+
+    <!-- ============ 右侧：控制面板 ============ -->
+    <aside class="panel">
+
+      <section class="card">
+        <h3><span class="num">1</span>这张图拍的是什么</h3>
+        <div class="types" id="types"></div>
+        <p class="hint" id="typeHint">选中后会推荐最擅长该领域的模型。</p>
+      </section>
+
+      <section class="card">
+        <h3><span class="num">2</span>模型</h3>
+        <div class="models" id="models"></div>
+        <div class="model-act">
+          <button class="btn" type="button" id="btnDownload" hidden>下载模型</button>
+          <button class="btn ghost" type="button" id="btnUpload">手动上传 .onnx</button>
+          <button class="btn ghost danger" type="button" id="btnClear">清除本机缓存</button>
+          <input type="file" id="modelInput" accept=".onnx" hidden>
+        </div>
+        <p class="hint">模型文件由浏览器直接下载并存在本机（IndexedDB），下次打开不用重下；下载不动时从网盘拿，再点「手动上传」。</p>
+      </section>
+
+      <section class="card">
+        <h3><span class="num">3</span>输出</h3>
+        <div class="row">
+          <label class="field">背景
+            <select id="selBg">
+              <option value="alpha">透明（PNG）</option>
+              <option value="white">纯白（JPG）</option>
+              <option value="color">自定义底色</option>
+              <option value="mask">黑白蒙版</option>
+            </select>
+          </label>
+          <label class="field" id="bgColorField" hidden>底色
+            <input type="color" id="bgColor" value="#1f2a44">
+          </label>
+        </div>
+        <label class="slider">边缘羽化 <b id="vFeather">0 px</b>
+          <input type="range" id="feather" min="0" max="6" step="1" value="0">
+        </label>
+        <label class="slider">去雾（清掉半透明背景残留） <b id="vCut">0.02</b>
+          <input type="range" id="cut" min="0" max="0.4" step="0.01" value="0.02">
+        </label>
+        <p class="hint">改这两项会立刻重画结果，不会重新跑模型。</p>
+      </section>
+
+      <section class="card">
+        <h3><span class="num">4</span>开始</h3>
+        <button class="btn primary big" type="button" id="btnRun" disabled>开始抠图</button>
+        <p class="hint" id="runHint">先上传图片、再选主体类型。</p>
+      </section>
+
+    </aside>
+  </main>
+
+  <!-- ============ 模型对照表 ============ -->
+  <section class="card wide">
+    <h3>模型擅长对照（选错模型，参数调到天亮也没用）</h3>
+    <div class="table-wrap">
+      <table class="mtable" id="mtable">
+        <thead>
+          <tr><th>模型</th><th>分类</th><th>体积</th><th>擅长</th><th>不擅长</th><th>来源</th><th>速度</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 下载不到的兜底 ============ -->
+  <section class="card wide">
+    <h3>模型下载不到？自己下、自己传</h3>
+    <p class="hint" id="netdiskTip"></p>
+    <ol class="steps">
+      <li>从下方网盘里把对应 <code>.onnx</code> 文件下载到本机（按中文分类目录放好就行）。</li>
+      <li>回到「模型」区域点 <b>手动上传 .onnx</b>，选中刚下载的文件。</li>
+      <li>模型同样会存进本机缓存，之后不用再传。</li>
+    </ol>
+    <div class="netdisk" id="netdisk"></div>
+    <p class="hint">整个站点只提供页面与推理运行时，<b>模型文件不占站点服务器的一分带宽</b>，也不需要你把它们放到服务器目录里。</p>
+  </section>
+
+  <footer class="foot">
+    <span>推理在你的浏览器里完成 · 图片不出本机</span>
+    <span>
+      <a href="https://github.com/bushimashen/ai-cutout" target="_blank" rel="noopener">GitHub</a>
+      · <a href="https://gitee.com/codegoder/ai-cutout" target="_blank" rel="noopener">Gitee</a>
+    </span>
+    <span id="footDevice"></span>
+  </footer>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="ovcard">
+    <div class="ovtitle" id="ovTitle">处理中…</div>
+    <div class="ovbar"><i id="ovBar"></i></div>
+    <div class="ovsub" id="ovSub"></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>

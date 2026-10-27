@@ -1,0 +1,16 @@
+# 模型权重不入库、不上站：一律由用户浏览器下载 / 手动上传（见 README「模型从哪来」）
+模型/**/*.onnx
+模型/**/*.bin
+模型/**/*.pth
+
+# OS / 编辑器杂物
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# 本地杂物
+*.log
+node_modules/
+README.md.bak
